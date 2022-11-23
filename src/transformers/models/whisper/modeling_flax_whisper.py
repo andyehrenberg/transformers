@@ -160,6 +160,7 @@ class FlaxWhisperAttention(nn.Module):
     config: WhisperConfig
     embed_dim: int
     num_heads: int
+    dropout: float = 0.0
     causal: bool = False
     bias: bool = True
     dtype: jnp.dtype = jnp.float32
@@ -195,7 +196,8 @@ class FlaxWhisperAttention(nn.Module):
         hidden_states: jnp.ndarray,
         key_value_states: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
-        init_cache=False,
+        init_cache: bool = False,
+        deterministic: bool = True,
     ) -> jnp.ndarray:
         is_cross_attention = key_value_states is not None
         batch_size = hidden_states.shape[0]
@@ -255,10 +257,20 @@ class FlaxWhisperAttention(nn.Module):
         else:
             attention_bias = None
 
+        dropout_rng = None
+        if not deterministic and self.dropout > 0.0:
+            dropout_rng = self.make_rng("dropout")
+
         attn_weights = dot_product_attention_weights(
             q,
             k,
             bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.dropout,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
         )
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, v)
@@ -327,6 +339,8 @@ class FlaxWhisperEncoderLayer(nn.Module):
             causal=False,
             dtype=self.dtype,
         )
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.self_attn_layer_norm = nn.LayerNorm(epsilon=1e-05)
         self.fc1 = nn.Dense(
@@ -348,11 +362,15 @@ class FlaxWhisperEncoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights = self.self_attn(hidden_states)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.activation_dropout_layer(
+            hidden_states, deterministic=deterministic
+        )
         hidden_states = self.fc2(hidden_states)
         hidden_states = residual + hidden_states
         
@@ -390,7 +408,11 @@ class EncoderLayerCollection(nn.Module):
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-            layer_outputs = layer(hidden_states)
+            layer_outputs = layer(
+                hidden_states, 
+                output_attentions=output_attentions,
+                deterministic=deterministic,
+            )
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -430,7 +452,8 @@ class FlaxWhisperDecoderLayer(nn.Module):
             dtype=self.dtype,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
-
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.fc1 = nn.Dense(
             self.config.decoder_ffn_dim, 
@@ -455,7 +478,12 @@ class FlaxWhisperDecoderLayer(nn.Module):
         
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights = self.self_attn(
-            hidden_states, attention_mask=attention_mask, init_cache=init_cache
+            hidden_states, 
+            attention_mask=attention_mask, 
+            init_cache=init_cache,
+        )
+        hidden_states = self.dropout_layer(
+            rate=hidden_states, deterministic=deterministic
         )
         hidden_states = residual + hidden_states
 
@@ -467,11 +495,17 @@ class FlaxWhisperDecoderLayer(nn.Module):
                 hidden_states,
                 encoder_hidden_states,
             )
+            hidden_states = self.dropout_layer(
+                rate=hidden_states, deterministic=deterministic
+            )
             hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.activation_dropout_layer(
+            rate=hidden_states, deterministic=deterministic
+        )
         hidden_states = self.fc2(hidden_states)
         hidden_states = residual + hidden_states
         
@@ -518,6 +552,8 @@ class FlaxWhisperDecoderLayerCollection(nn.Module):
                 attention_mask,
                 encoder_hidden_states,
                 init_cache=init_cache,
+                output_attentions=output_attentions,
+                deterministic=deterministic,
             )
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -564,6 +600,8 @@ class FlaxWhisperEncoder(nn.Module):
             dtype=self.dtype,
         )
 
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+
         self.layers = EncoderLayerCollection(
             self.config,
             dtype=self.dtype,
@@ -585,7 +623,11 @@ class FlaxWhisperEncoder(nn.Module):
         hidden_states = jax.nn.gelu(self.conv2(hidden_states), approximate=False)
         
         assert hidden_states.shape[1:] == (self.config.max_source_positions, self.config.d_model), "incorrect audio shape"
-        hidden_states = hidden_states + self.embed_positions(jnp.arange(self.config.max_source_positions))
+        hidden_states = hidden_states + self.embed_positions(
+            jnp.arange(self.config.max_source_positions)
+        )
+
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
         outputs = self.layers(
             hidden_states,
@@ -621,6 +663,8 @@ class FlaxWhisperDecoder(nn.Module):
             self.config, dtype=self.dtype
         )
 
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-5)
 
     def __call__(
@@ -645,6 +689,7 @@ class FlaxWhisperDecoder(nn.Module):
         pos_emb = self.embed_positions(position_ids)
         
         hidden_states = self.embed_tokens(input_ids) + pos_emb
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
         outputs = self.layers(
             hidden_states,
