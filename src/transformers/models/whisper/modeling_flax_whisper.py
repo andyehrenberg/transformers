@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
+from flax.linen import partitioning as nn_partitioning
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
@@ -28,6 +29,8 @@ from ...modeling_flax_utils import (
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
+
+scan_with_axes = nn_partitioning.scan_with_axes
 
 
 logger = logging.get_logger(__name__)
@@ -915,7 +918,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings(WHISPER_ENCODE_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=WhisperConfig)
+    @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=WhisperConfig)
     def encode(
         self,
         input_features: jnp.ndarray,
@@ -955,7 +958,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         )
 
     @add_start_docstrings(WHISPER_DECODE_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=WhisperConfig)
+    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=WhisperConfig)
     def decode(
         self,
         decoder_input_ids,
@@ -1221,7 +1224,7 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
     dtype: jnp.dtype = jnp.float32
 
     @add_start_docstrings(WHISPER_DECODE_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=WhisperConfig)
+    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=WhisperConfig)
     def decode(
         self,
         decoder_input_ids,
