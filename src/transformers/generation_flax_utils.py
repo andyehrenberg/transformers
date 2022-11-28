@@ -170,22 +170,14 @@ class FlaxGenerationMixin:
             decoder_input_ids = model_kwargs.pop("decoder_input_ids")
             if decoder_input_ids is not None:
                 return decoder_input_ids
-        decoder_start_token_id = self._get_decoder_start_token_id(
-            decoder_start_token_id, bos_token_id
-        )
+        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         return jnp.array(decoder_start_token_id).reshape(1, -1).repeat(batch_size, axis=0)
 
-    def _get_decoder_start_token_id(
-        self, decoder_start_token_id: int = None, bos_token_id: int = None
-    ) -> int:
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         decoder_start_token_id = (
-            decoder_start_token_id
-            if decoder_start_token_id is not None
-            else self.config.decoder_start_token_id
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
-        bos_token_id = (
-            bos_token_id if bos_token_id is not None else self.config.bos_token_id
-        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
 
         if decoder_start_token_id is not None:
             return decoder_start_token_id
@@ -382,9 +374,7 @@ class FlaxGenerationMixin:
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
             if model_kwargs.get("encoder_outputs") is None:
-                model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
-                    input_ids, params, model_kwargs
-                )
+                model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
             input_ids = self._prepare_decoder_input_ids_for_generation(
                 batch_size,
@@ -458,11 +448,11 @@ class FlaxGenerationMixin:
         elif do_sample and num_beams == 1:
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, 
-                min_length, 
-                max_length, 
-                eos_token_id, 
-                forced_bos_token_id, 
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
                 forced_eos_token_id,
                 input_ids_seq_length,
                 suppress_tokens=suppress_tokens,
@@ -579,9 +569,7 @@ class FlaxGenerationMixin:
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
         )
-        suppress_tokens = (
-            suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
-        )
+        suppress_tokens = suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
         begin_suppress_tokens = (
             begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
         )
@@ -603,9 +591,7 @@ class FlaxGenerationMixin:
             begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
             if forced_decoder_ids is not None:
                 begin_index += forced_decoder_ids[-1][0]  # generation starts after the last token that is forced
-            processors.append(
-                FlaxSuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index)
-            )
+            processors.append(FlaxSuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
         if forced_decoder_ids is not None:
             processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
         return processors

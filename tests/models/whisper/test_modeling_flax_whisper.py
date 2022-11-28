@@ -224,7 +224,6 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
 
@@ -257,7 +256,6 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]

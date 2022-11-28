@@ -259,7 +259,6 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
-
         # create boolean flag to decide if min length penalty should be applied
         apply_penalty = 1 - jnp.clip(cur_len - self.min_length, 0, 1)
 
@@ -290,9 +289,7 @@ class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
     def __init__(self, suppress_tokens: list):
         self.suppress_tokens = list(suppress_tokens)
 
-    def __call__(
-        self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int
-    ) -> jnp.ndarray:
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
         scores = scores.at[..., self.suppress_tokens].set(-float("inf"))
 
         return scores
