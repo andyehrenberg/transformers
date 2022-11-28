@@ -1067,6 +1067,24 @@ class FlaxWav2Vec2PreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
+class FlaxWhisperForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+class FlaxWhisperModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+class FlaxWhisperPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxXGLMForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
