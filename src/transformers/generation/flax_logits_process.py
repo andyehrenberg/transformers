@@ -342,18 +342,10 @@ class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
             new_scores = lax.dynamic_update_slice(new_scores, updates, (0, current_token))
             return new_scores
 
-        scores = lax.cond(
-            cur_len >= self.force_token_array.shape[0],
-            # If the current length is geq than the length of force_token_array, the processor does nothing.
-            lambda: scores,
-            # Otherwise, it may force a certain token.
-            lambda: lax.cond(
-                self.force_token_array[cur_len] >= 0,
-                # Only valid (positive) tokens are forced
-                lambda: _force_token(cur_len),
-                # Otherwise, the processor does nothing.
-                lambda: scores,
-            ),
+        scores = jnp.where(
+            (cur_len < self.force_token_array.shape[0]) & (self.force_token_array[cur_len] >= 0),
+            _force_token(cur_len),
+            scores,
         )
         return scores
 
